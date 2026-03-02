@@ -64,11 +64,18 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "path not allowed", http.StatusNotFound)
 		return
 	}
+	if r.Proto != "websocket" {
+		metrics.Rejected.WithLabelValues("bad_headers").Inc()
+		http.Error(w, "missing/invalid :protocol websocket", http.StatusBadRequest)
+		return
+	}
+
 	key := r.Header.Get("Sec-WebSocket-Key")
 	ver := r.Header.Get("Sec-WebSocket-Version")
-	hasStandardWSHeaders := key != "" && ver == "13"
-	if !hasStandardWSHeaders {
-		p.debugf("rfc9220 compatibility mode: proceeding without strict Sec-WebSocket-Key/Version check (proto=%s host=%s path=%s key_present=%v version=%q)", r.Proto, r.Host, r.URL.Path, key != "", ver)
+	if key == "" || ver != "13" {
+		metrics.Rejected.WithLabelValues("bad_headers").Inc()
+		http.Error(w, "missing/invalid websocket headers", http.StatusBadRequest)
+		return
 	}
 
 	rc := http.NewResponseController(w)
@@ -83,9 +90,7 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if key != "" {
-		w.Header().Set("Sec-WebSocket-Accept", ws.ComputeAccept(key))
-	}
+	w.Header().Set("Sec-WebSocket-Accept", ws.ComputeAccept(key))
 	subp := r.Header.Get("Sec-WebSocket-Protocol")
 	if subp != "" {
 		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
