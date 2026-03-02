@@ -117,7 +117,7 @@ func Run() error {
 	}
 
 	if cfg.Debug {
-		log.Printf("[debug] quic config: max_idle=%s keepalive=%s incoming_streams=%d incoming_uni_streams=%d stream_recv_window=%d conn_recv_window=%d", quicCfg.MaxIdleTimeout, quicCfg.KeepAlivePeriod, quicCfg.MaxIncomingStreams, quicCfg.MaxIncomingUniStreams, quicCfg.MaxStreamReceiveWindow, quicCfg.MaxConnectionReceiveWindow)
+		log.Printf("[debug] quic config: max_idle=%s keepalive=%s allow_0rtt=%v incoming_streams=%d incoming_uni_streams=%d stream_recv_window=%d conn_recv_window=%d", quicCfg.MaxIdleTimeout, quicCfg.KeepAlivePeriod, quicCfg.Allow0RTT, quicCfg.MaxIncomingStreams, quicCfg.MaxIncomingUniStreams, quicCfg.MaxStreamReceiveWindow, quicCfg.MaxConnectionReceiveWindow)
 	}
 
 	log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, backend=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, backendURL.String(), cfg.Debug)
@@ -182,7 +182,7 @@ func defaultQUICConfig(debug bool) *quic.Config {
 		MaxStreamReceiveWindow:         8 << 20,
 		InitialConnectionReceiveWindow: 8 << 20,
 		MaxConnectionReceiveWindow:     32 << 20,
-		Allow0RTT:                      false,
+		Allow0RTT:                      true,
 	}
 
 	if debug {
