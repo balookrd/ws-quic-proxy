@@ -201,6 +201,8 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 			var rxClientUniStreamFrames int64
 			var rxServerBidiStreamFrames int64
 			var rxServerUniStreamFrames int64
+			var connStartedAt time.Time
+			var firstClientUniStreamID int64 = -1
 
 			log.Printf("[debug] quic connection tracer attached: conn_id=%s", connID)
 			observeRxStreamFrames := func(frames []logging.Frame) {
@@ -217,6 +219,9 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						atomic.AddInt64(&rxServerBidiStreamFrames, 1)
 					case 2:
 						atomic.AddInt64(&rxClientUniStreamFrames, 1)
+						if firstClientUniStreamID < 0 {
+							firstClientUniStreamID = int64(sf.StreamID)
+						}
 					case 3:
 						atomic.AddInt64(&rxServerUniStreamFrames, 1)
 					}
@@ -224,6 +229,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 			}
 			return &logging.ConnectionTracer{
 				StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+					connStartedAt = time.Now()
 					if connRemoteAddr != nil {
 						connRemoteAddr.Store(connID, remote.String())
 					}
@@ -290,8 +296,9 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 							clientUni := atomic.LoadInt64(&rxClientUniStreamFrames)
 							serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
 							serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
-							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-							diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni)
+							lifetime := time.Since(connStartedAt)
+							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v lifetime=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, err, lifetime, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
+							diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
 							return
 						}
 						log.Printf("[debug] quic conn closed: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -302,8 +309,9 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						clientUni := atomic.LoadInt64(&rxClientUniStreamFrames)
 						serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
 						serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
-						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-						diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni)
+						lifetime := time.Since(connStartedAt)
+						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s lifetime=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, lifetime, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
+						diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
 						return
 					}
 					log.Printf("[debug] quic conn closed cleanly: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -395,7 +403,7 @@ func isExpectedDroppedPacket(pt logging.PacketType, reason logging.PacketDropRea
 	return pt == logging.PacketTypeNotDetermined && reason == logging.PacketDropUnknownConnectionID
 }
 
-func diagnoseMissingRequestStream(connID quic.ConnectionID, clientBidi, clientUni, serverBidi, serverUni int64) {
+func diagnoseMissingRequestStream(connID quic.ConnectionID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID int64) {
 	if clientBidi > 0 {
 		return
 	}
@@ -403,6 +411,10 @@ func diagnoseMissingRequestStream(connID quic.ConnectionID, clientBidi, clientUn
 	switch {
 	case clientUni > 0 && serverBidi == 0 && serverUni == 0:
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s only client unidirectional stream traffic observed (typically control stream / SETTINGS), no request stream created", connID)
+		if firstClientUniStreamID >= 0 {
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s first_client_uni_stream_id=%d (expected control stream id=2 on first h3 unidirectional stream)", connID, firstClientUniStreamID)
+		}
+		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s peer likely closed before opening request stream; verify client actually sends CONNECT on client-initiated bidirectional stream", connID)
 	case clientUni == 0 && serverBidi == 0 && serverUni == 0:
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s handshake completed but no HTTP/3 stream activity followed", connID)
 	default:
