@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"h3ws2h1ws-proxy/internal/config"
@@ -59,9 +60,14 @@ func Run() error {
 		},
 	}
 
+	var connHadRequest sync.Map
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Debug {
+			if connID, ok := r.Context().Value(quic.ConnectionTracingKey).(quic.ConnectionTracingID); ok {
+				connHadRequest.Store(connID, true)
+			}
 			log.Printf("[debug] incoming http request: method=%s proto=%s host=%s path=%s remote=%s", r.Method, r.Proto, r.Host, r.URL.String(), r.RemoteAddr)
 		}
 
@@ -79,7 +85,7 @@ func Run() error {
 		http.NotFound(w, r)
 	})
 
-	quicCfg := defaultQUICConfig(cfg.Debug)
+	quicCfg := defaultQUICConfig(cfg.Debug, &connHadRequest)
 	tlsCfg, err := loadServerTLSConfig(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		return fmt.Errorf("load TLS config: %w", err)
@@ -171,7 +177,7 @@ func startMetricsServer(addr string) {
 	}()
 }
 
-func defaultQUICConfig(debug bool) *quic.Config {
+func defaultQUICConfig(debug bool, connHadRequest *sync.Map) *quic.Config {
 	quicCfg := &quic.Config{
 		EnableDatagrams:                false,
 		MaxIdleTimeout:                 60 * time.Second,
@@ -196,8 +202,23 @@ func defaultQUICConfig(debug bool) *quic.Config {
 					log.Printf("[debug] quic conn alpn negotiated: conn_id=%s alpn=%q", connID, protocol)
 				},
 				ClosedConnection: func(err error) {
+					hadReq := false
+					if connHadRequest != nil {
+						if v, ok := connHadRequest.Load(connID); ok {
+							hadReq, _ = v.(bool)
+							connHadRequest.Delete(connID)
+						}
+					}
 					if err != nil {
+						if !hadReq {
+							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v", connID, err)
+							return
+						}
 						log.Printf("[debug] quic conn closed: conn_id=%s err=%v", connID, err)
+						return
+					}
+					if !hadReq {
+						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s", connID)
 						return
 					}
 					log.Printf("[debug] quic conn closed cleanly: conn_id=%s", connID)
