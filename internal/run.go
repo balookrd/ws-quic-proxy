@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"h3ws2h1ws-proxy/internal/config"
@@ -192,6 +193,11 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 
 	if debug {
 		quicCfg.Tracer = func(_ context.Context, _ logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+			const packetLogLimit = int64(12)
+			var rxPackets int64
+			var txPackets int64
+			var droppedPackets int64
+
 			log.Printf("[debug] quic connection tracer attached: conn_id=%s", connID)
 			return &logging.ConnectionTracer{
 				StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
@@ -199,6 +205,40 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						connRemoteAddr.Store(connID, remote.String())
 					}
 					log.Printf("[debug] quic conn started: local=%s remote=%s src_conn_id=%s dest_conn_id=%s", local, remote, srcConnID, destConnID)
+				},
+				SentTransportParameters: func(tp *logging.TransportParameters) {
+					log.Printf("[debug] quic transport params sent: conn_id=%s max_idle=%s max_udp_payload=%d initial_max_streams_bidi=%d initial_max_streams_uni=%d", connID, tp.MaxIdleTimeout, tp.MaxUDPPayloadSize, tp.MaxBidiStreamNum, tp.MaxUniStreamNum)
+				},
+				ReceivedTransportParameters: func(tp *logging.TransportParameters) {
+					log.Printf("[debug] quic transport params recv: conn_id=%s max_idle=%s max_udp_payload=%d initial_max_streams_bidi=%d initial_max_streams_uni=%d", connID, tp.MaxIdleTimeout, tp.MaxUDPPayloadSize, tp.MaxBidiStreamNum, tp.MaxUniStreamNum)
+				},
+				SentLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, frames []logging.Frame) {
+					n := atomic.AddInt64(&txPackets, 1)
+					if n <= packetLogLimit {
+						log.Printf("[debug] quic packet sent: conn_id=%s kind=long type=%s pn=%d bytes=%d frames=%s", connID, hdr.Type, hdr.PacketNumber, size, summarizeQUICFrames(frames))
+					}
+				},
+				SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, frames []logging.Frame) {
+					n := atomic.AddInt64(&txPackets, 1)
+					if n <= packetLogLimit {
+						log.Printf("[debug] quic packet sent: conn_id=%s kind=short pn=%d bytes=%d key_phase=%d frames=%s", connID, hdr.PacketNumber, size, hdr.KeyPhase, summarizeQUICFrames(frames))
+					}
+				},
+				ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+					n := atomic.AddInt64(&rxPackets, 1)
+					if n <= packetLogLimit {
+						log.Printf("[debug] quic packet recv: conn_id=%s kind=long type=%s pn=%d bytes=%d frames=%s", connID, hdr.Type, hdr.PacketNumber, size, summarizeQUICFrames(frames))
+					}
+				},
+				ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+					n := atomic.AddInt64(&rxPackets, 1)
+					if n <= packetLogLimit {
+						log.Printf("[debug] quic packet recv: conn_id=%s kind=short pn=%d bytes=%d key_phase=%d frames=%s", connID, hdr.PacketNumber, size, hdr.KeyPhase, summarizeQUICFrames(frames))
+					}
+				},
+				DroppedPacket: func(pt logging.PacketType, pn logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
+					atomic.AddInt64(&droppedPackets, 1)
+					log.Printf("[debug] quic packet dropped: conn_id=%s packet_type=%v pn=%d bytes=%d reason=%v", connID, pt, pn, size, reason)
 				},
 				ChoseALPN: func(protocol string) {
 					log.Printf("[debug] quic conn alpn negotiated: conn_id=%s alpn=%q", connID, protocol)
@@ -218,17 +258,17 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 					}
 					if err != nil {
 						if !hadReq {
-							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v", connID, err)
+							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
 							return
 						}
-						log.Printf("[debug] quic conn closed: conn_id=%s err=%v", connID, err)
+						log.Printf("[debug] quic conn closed: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
 						return
 					}
 					if !hadReq {
-						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s", connID)
+						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
 						return
 					}
-					log.Printf("[debug] quic conn closed cleanly: conn_id=%s", connID)
+					log.Printf("[debug] quic conn closed cleanly: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
 				},
 				Debug: func(name, msg string) {
 					log.Printf("[debug] quic conn event: conn_id=%s name=%s msg=%s", connID, name, msg)
@@ -240,6 +280,16 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 	return quicCfg
 }
 
+func summarizeQUICFrames(frames []logging.Frame) string {
+	if len(frames) == 0 {
+		return "none"
+	}
+	names := make([]string, 0, len(frames))
+	for _, f := range frames {
+		names = append(names, fmt.Sprintf("%T", f))
+	}
+	return strings.Join(names, ",")
+}
 func loadServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	tlsCfg := config.DefaultTLSConfig()
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
