@@ -180,7 +180,6 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 
 	if debug {
 		quicCfg.Tracer = func(_ context.Context, _ logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
-			const packetLogLimit = int64(12)
 			var rxPackets int64
 			var txPackets int64
 			var droppedPackets int64
@@ -233,38 +232,25 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 				ReceivedTransportParameters: func(tp *logging.TransportParameters) {
 					log.Printf("[debug] quic transport params recv: conn_id=%s max_idle=%s max_udp_payload=%d initial_max_streams_bidi=%d initial_max_streams_uni=%d", connID, tp.MaxIdleTimeout, tp.MaxUDPPayloadSize, tp.MaxBidiStreamNum, tp.MaxUniStreamNum)
 				},
-				SentLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, frames []logging.Frame) {
-					n := atomic.AddInt64(&txPackets, 1)
-					if n <= packetLogLimit {
-						log.Printf("[debug] quic packet sent: conn_id=%s kind=long type=%s pn=%d bytes=%d frames=%s", connID, hdr.Type, hdr.PacketNumber, size, summarizeQUICFrames(frames))
-					}
-				},
-				SentShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, frames []logging.Frame) {
-					n := atomic.AddInt64(&txPackets, 1)
-					if n <= packetLogLimit {
-						log.Printf("[debug] quic packet sent: conn_id=%s kind=short pn=%d bytes=%d key_phase=%d frames=%s", connID, hdr.PacketNumber, size, hdr.KeyPhase, summarizeQUICFrames(frames))
-					}
-				},
-				ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+				ReceivedLongHeaderPacket: func(_ *logging.ExtendedHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
 					observeRxStreamFrames(frames)
-					n := atomic.AddInt64(&rxPackets, 1)
-					if n <= packetLogLimit {
-						log.Printf("[debug] quic packet recv: conn_id=%s kind=long type=%s pn=%d bytes=%d frames=%s", connID, hdr.Type, hdr.PacketNumber, size, summarizeQUICFrames(frames))
-					}
+					atomic.AddInt64(&rxPackets, 1)
 				},
-				ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+				ReceivedShortHeaderPacket: func(_ *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
 					observeRxStreamFrames(frames)
-					n := atomic.AddInt64(&rxPackets, 1)
-					if n <= packetLogLimit {
-						log.Printf("[debug] quic packet recv: conn_id=%s kind=short pn=%d bytes=%d key_phase=%d frames=%s", connID, hdr.PacketNumber, size, hdr.KeyPhase, summarizeQUICFrames(frames))
-					}
+					atomic.AddInt64(&rxPackets, 1)
 				},
-				DroppedPacket: func(pt logging.PacketType, pn logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
+				SentLongHeaderPacket: func(_ *logging.ExtendedHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
+					atomic.AddInt64(&txPackets, 1)
+				},
+				SentShortHeaderPacket: func(_ *logging.ShortHeader, _ logging.ByteCount, _ logging.ECN, _ *logging.AckFrame, _ []logging.Frame) {
+					atomic.AddInt64(&txPackets, 1)
+				},
+				DroppedPacket: func(pt logging.PacketType, _ logging.PacketNumber, _ logging.ByteCount, reason logging.PacketDropReason) {
 					atomic.AddInt64(&droppedPackets, 1)
-					if isExpectedDroppedPacket(pt, reason) {
-						return
+					if !isExpectedDroppedPacket(pt, reason) {
+						log.Printf("[debug] quic packet dropped: conn_id=%s packet_type=%s reason=%s", connID, packetTypeName(pt), packetDropReasonName(reason))
 					}
-					log.Printf("[debug] quic packet dropped: conn_id=%s packet_type=%s pn=%d bytes=%d reason=%s", connID, packetTypeName(pt), pn, size, packetDropReasonName(reason))
 				},
 				ChoseALPN: func(protocol string) {
 					log.Printf("[debug] quic conn alpn negotiated: conn_id=%s alpn=%q", connID, protocol)
