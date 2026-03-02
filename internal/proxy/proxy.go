@@ -90,6 +90,7 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
 	}
 	w.WriteHeader(http.StatusOK)
+	p.debugf("rfc9220 handshake response sent: status=200 path=%s", r.URL.Path)
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
 	}
