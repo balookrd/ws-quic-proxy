@@ -1,10 +1,12 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/quic-go/logging"
 )
 
 func Run() error {
@@ -55,6 +58,10 @@ func Run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Debug {
+			log.Printf("[debug] incoming http request: method=%s proto=%s host=%s path=%s remote=%s", r.Method, r.Proto, r.Host, r.URL.String(), r.RemoteAddr)
+		}
+
 		if strings.ToUpper(r.Method) == http.MethodConnect {
 			p.HandleH3WebSocket(w, r)
 			return
@@ -69,7 +76,7 @@ func Run() error {
 		http.NotFound(w, r)
 	})
 
-	quicCfg := defaultQUICConfig()
+	quicCfg := defaultQUICConfig(cfg.Debug)
 	server := http3.Server{
 		Addr:       cfg.ListenAddr,
 		Handler:    mux,
@@ -132,8 +139,8 @@ func startMetricsServer(addr string) {
 	}()
 }
 
-func defaultQUICConfig() *quic.Config {
-	return &quic.Config{
+func defaultQUICConfig(debug bool) *quic.Config {
+	quicCfg := &quic.Config{
 		EnableDatagrams:                false,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                20 * time.Second,
@@ -145,4 +152,27 @@ func defaultQUICConfig() *quic.Config {
 		MaxConnectionReceiveWindow:     32 << 20,
 		Allow0RTT:                      false,
 	}
+
+	if debug {
+		quicCfg.Tracer = func(_ context.Context, _ logging.Perspective, connID quic.ConnectionID) *logging.ConnectionTracer {
+			log.Printf("[debug] quic connection tracer attached: conn_id=%s", connID)
+			return &logging.ConnectionTracer{
+				StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
+					log.Printf("[debug] quic conn started: local=%s remote=%s src_conn_id=%s dest_conn_id=%s", local, remote, srcConnID, destConnID)
+				},
+				ChoseALPN: func(protocol string) {
+					log.Printf("[debug] quic conn alpn negotiated: conn_id=%s alpn=%q", connID, protocol)
+				},
+				ClosedConnection: func(err error) {
+					if err != nil {
+						log.Printf("[debug] quic conn closed: conn_id=%s err=%v", connID, err)
+						return
+					}
+					log.Printf("[debug] quic conn closed cleanly: conn_id=%s", connID)
+				},
+			}
+		}
+	}
+
+	return quicCfg
 }
