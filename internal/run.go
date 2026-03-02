@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -79,10 +80,15 @@ func Run() error {
 	})
 
 	quicCfg := defaultQUICConfig(cfg.Debug)
+	tlsCfg, err := loadServerTLSConfig(cfg.CertFile, cfg.KeyFile)
+	if err != nil {
+		return fmt.Errorf("load TLS config: %w", err)
+	}
+
 	server := http3.Server{
 		Addr:       cfg.ListenAddr,
 		Handler:    mux,
-		TLSConfig:  config.DefaultTLSConfig(),
+		TLSConfig:  tlsCfg,
 		QUICConfig: quicCfg,
 	}
 
@@ -115,8 +121,8 @@ func Run() error {
 	}
 
 	log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, backend=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, backendURL.String(), cfg.Debug)
-	if err := server.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile); err != nil {
-		return fmt.Errorf("ListenAndServeTLS: %w", err)
+	if err := server.ListenAndServe(); err != nil {
+		return fmt.Errorf("ListenAndServe: %w", err)
 	}
 	return nil
 }
@@ -204,4 +210,14 @@ func defaultQUICConfig(debug bool) *quic.Config {
 	}
 
 	return quicCfg
+}
+
+func loadServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
+	tlsCfg := config.DefaultTLSConfig()
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	tlsCfg.Certificates = []tls.Certificate{cert}
+	return tlsCfg, nil
 }
