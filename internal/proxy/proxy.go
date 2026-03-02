@@ -88,6 +88,9 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
 	}
 	w.WriteHeader(http.StatusOK)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 
 	dialer := websocket.Dialer{
 		Proxy:             http.ProxyFromEnvironment,
