@@ -16,6 +16,4 @@ RUN apk add --no-cache ca-certificates openssl
 
 COPY --from=builder /out/h3ws2h1ws-proxy /app/h3ws2h1ws-proxy
 
-EXPOSE 443/udp 9090
-
 ENTRYPOINT ["/app/h3ws2h1ws-proxy"]
