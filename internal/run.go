@@ -105,22 +105,8 @@ func Run() error {
 			log.Printf("[debug] http3 conn context: conn_id=%v local=%s remote=%s", c.Context().Value(quic.ConnectionTracingKey), c.LocalAddr(), c.RemoteAddr())
 			return ctx
 		}
-		server.StreamHijacker = func(ft http3.FrameType, connID quic.ConnectionTracingID, _ quic.Stream, err error) (bool, error) {
-			if err != nil {
-				log.Printf("[debug] http3 stream parse issue: conn_id=%v err=%v", connID, err)
-				return false, nil
-			}
-			log.Printf("[debug] http3 stream first frame: conn_id=%v frame_type=%d", connID, ft)
-			return false, nil
-		}
-		server.UniStreamHijacker = func(st http3.StreamType, connID quic.ConnectionTracingID, _ quic.ReceiveStream, err error) bool {
-			if err != nil {
-				log.Printf("[debug] http3 unistream parse issue: conn_id=%v err=%v", connID, err)
-				return false
-			}
-			log.Printf("[debug] http3 unistream: conn_id=%v stream_type=%d", connID, st)
-			return false
-		}
+		// Keep debug hooks passive: avoid StreamHijacker / UniStreamHijacker overrides,
+		// as they may interfere with stream dispatch on some client + quic-go combinations.
 	}
 
 	if cfg.Debug {
