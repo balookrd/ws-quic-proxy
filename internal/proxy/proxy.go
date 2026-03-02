@@ -71,7 +71,7 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hs, ok := r.Body.(http3.HTTPStreamer)
+	hs, ok := w.(http3.HTTPStreamer)
 	if !ok {
 		metrics.Errors.WithLabelValues("no_stream_takeover").Inc()
 		http.Error(w, "http3 stream takeover not supported", http.StatusInternalServerError)
