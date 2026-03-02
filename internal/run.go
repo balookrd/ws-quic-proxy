@@ -55,6 +55,10 @@ func Run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Debug {
+			log.Printf("[debug] incoming http request: method=%s proto=%s host=%s path=%s remote=%s", r.Method, r.Proto, r.Host, r.URL.String(), r.RemoteAddr)
+		}
+
 		if strings.ToUpper(r.Method) == http.MethodConnect {
 			p.HandleH3WebSocket(w, r)
 			return
