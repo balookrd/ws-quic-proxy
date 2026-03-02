@@ -187,7 +187,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 		MaxStreamReceiveWindow:         8 << 20,
 		InitialConnectionReceiveWindow: 8 << 20,
 		MaxConnectionReceiveWindow:     32 << 20,
-		Allow0RTT:                      true,
+		Allow0RTT:                      false,
 	}
 
 	if debug {
