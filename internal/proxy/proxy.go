@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"h3ws2h1ws-proxy/internal/config"
 	"h3ws2h1ws-proxy/internal/metrics"
@@ -44,7 +44,7 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer atomic.AddInt64(&p.active, -1)
 
-	if strings.ToUpper(r.Method) != http.MethodConnect {
+	if r.Method != http.MethodConnect {
 		metrics.Rejected.WithLabelValues("method").Inc()
 		http.Error(w, "expected CONNECT", http.StatusMethodNotAllowed)
 		return
@@ -78,7 +78,13 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 
-	dialer := websocket.Dialer{Proxy: http.ProxyFromEnvironment}
+	dialer := websocket.Dialer{
+		Proxy:             http.ProxyFromEnvironment,
+		ReadBufferSize:    64 << 10,
+		WriteBufferSize:   64 << 10,
+		HandshakeTimeout:  10 * time.Second,
+		EnableCompression: false,
+	}
 	backendHeader := http.Header{}
 	if subp != "" {
 		backendHeader.Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))

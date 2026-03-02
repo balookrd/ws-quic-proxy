@@ -127,8 +127,15 @@ func startMetricsServer(addr string) {
 
 func defaultQUICConfig() *quic.Config {
 	return &quic.Config{
-		EnableDatagrams: false,
-		MaxIdleTimeout:  60 * time.Second,
-		KeepAlivePeriod: 20 * time.Second,
+		EnableDatagrams:                false,
+		MaxIdleTimeout:                 60 * time.Second,
+		KeepAlivePeriod:                20 * time.Second,
+		MaxIncomingStreams:             10000,
+		MaxIncomingUniStreams:          1000,
+		InitialStreamReceiveWindow:     2 << 20,
+		MaxStreamReceiveWindow:         8 << 20,
+		InitialConnectionReceiveWindow: 8 << 20,
+		MaxConnectionReceiveWindow:     32 << 20,
+		Allow0RTT:                      false,
 	}
 }
