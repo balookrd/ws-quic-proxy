@@ -136,6 +136,10 @@ Endpoint: `http://<metrics-addr>/metrics` (доступен только есл�
 - `h3ws_proxy_errors_total{stage=...}`
 - `h3ws_proxy_bytes_total{dir=...}`
 - `h3ws_proxy_messages_total{dir=...,type=...}`
+- `h3ws_proxy_frames_total{dir=...,opcode=...}`
+- `h3ws_proxy_message_size_bytes_bucket{dir=...,type=...,le=...}`
+- `h3ws_proxy_session_duration_seconds_bucket{le=...}`
+- `h3ws_proxy_session_traffic_bytes_bucket{dir=...,le=...}`
 - `h3ws_proxy_control_frames_total{type=...}`
 - `h3ws_proxy_oversize_drops_total{kind=...}`
 
@@ -166,7 +170,7 @@ Endpoint: `http://<metrics-addr>/metrics` (доступен только есл�
 - `deploy/prometheus/prometheus.yml` — scrape-конфиг Prometheus.
 - `deploy/grafana/provisioning/datasources/prometheus.yml` — datasource provisioning.
 - `deploy/grafana/provisioning/dashboards/dashboards.yml` — auto-import dashboard.
-- `deploy/grafana/dashboards/h3ws-proxy-overview.json` — готовый dashboard для метрик прокси.
+- `deploy/grafana/dashboards/h3ws-proxy-overview.json` — production-ready dashboard (SLO, трафик, размеры сообщений, ошибки).
 
 Запуск:
 

@@ -27,6 +27,25 @@ var (
 		Name: "h3ws_proxy_messages_total",
 		Help: "Messages forwarded by direction and type",
 	}, []string{"dir", "type"})
+	Frames = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "h3ws_proxy_frames_total",
+		Help: "WebSocket frames forwarded by direction and opcode",
+	}, []string{"dir", "opcode"})
+	MessageSize = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "h3ws_proxy_message_size_bytes",
+		Help:    "Observed message size by direction and type",
+		Buckets: []float64{64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304},
+	}, []string{"dir", "type"})
+	SessionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "h3ws_proxy_session_duration_seconds",
+		Help:    "Proxy session lifetime in seconds",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600},
+	})
+	SessionTrafficBytes = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "h3ws_proxy_session_traffic_bytes",
+		Help:    "Total bytes transferred per session by direction",
+		Buckets: []float64{512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728},
+	}, []string{"dir"})
 	Ctrl = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "h3ws_proxy_control_frames_total",
 		Help: "Control frames observed",
@@ -40,6 +59,8 @@ var (
 func init() {
 	prometheus.MustRegister(
 		ActiveSessions, Accepted, Rejected, Errors,
-		Bytes, Messages, Ctrl, OversizeDrops,
+		Bytes, Messages, Frames, MessageSize,
+		SessionDuration, SessionTrafficBytes,
+		Ctrl, OversizeDrops,
 	)
 }

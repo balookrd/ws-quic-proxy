@@ -4,350 +4,154 @@
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
   "links": [],
   "panels": [
     {
       "datasource": "Prometheus",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "short"
-        },
+        "defaults": { "unit": "short" },
         "overrides": []
       },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 0,
-        "y": 0
-      },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "id": 1,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "h3ws_proxy_active_sessions",
-          "refId": "A"
-        }
-      ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "h3ws_proxy_active_sessions", "refId": "A" }],
       "title": "Active Sessions",
       "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
       "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "increase(h3ws_proxy_accepted_total[5m])",
-          "refId": "A"
-        }
-      ],
-      "title": "Accepted (5m)",
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "rate(h3ws_proxy_accepted_total[$__rate_interval])", "refId": "A" }],
+      "title": "Accept Rate",
       "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 3 }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
       "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(h3ws_proxy_rejected_total[5m]))",
-          "refId": "A"
-        }
-      ],
-      "title": "Rejected (5m)",
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "sum(rate(h3ws_proxy_rejected_total[$__rate_interval])) / clamp_min(sum(rate(h3ws_proxy_accepted_total[$__rate_interval])) + sum(rate(h3ws_proxy_rejected_total[$__rate_interval])), 1e-9)", "refId": "A" }],
+      "title": "Reject Ratio",
       "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 3 }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
       "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(h3ws_proxy_errors_total[5m]))",
-          "refId": "A"
-        }
-      ],
-      "title": "Errors (5m)",
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{ "expr": "sum(rate(h3ws_proxy_errors_total[$__rate_interval])) / clamp_min(sum(rate(h3ws_proxy_accepted_total[$__rate_interval])), 1e-9)", "refId": "A" }],
+      "title": "Error / Accept Ratio",
       "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "Bps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 7
-      },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
       "id": 5,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (dir) (rate(h3ws_proxy_bytes_total[5m]))",
-          "legendFormat": "{{dir}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Throughput by Direction",
-      "type": "timeseries"
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(h3ws_proxy_session_duration_seconds_bucket[$__rate_interval])) by (le))", "refId": "A" }],
+      "title": "Session Duration p95",
+      "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
       "id": 6,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (reason) (increase(h3ws_proxy_rejected_total[5m]))",
-          "legendFormat": "{{reason}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Rejected by Reason (5m)",
-      "type": "timeseries"
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" },
+      "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(h3ws_proxy_session_duration_seconds_bucket[$__rate_interval])) by (le))", "refId": "A" }],
+      "title": "Session Duration p99",
+      "type": "stat"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 15
-      },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
       "id": 7,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum by (type) (increase(h3ws_proxy_control_frames_total[5m]))",
-          "legendFormat": "{{type}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Control Frames (5m)",
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "expr": "sum by (dir) (rate(h3ws_proxy_bytes_total[$__rate_interval]))", "legendFormat": "{{dir}}", "refId": "A" }],
+      "title": "Traffic Throughput by Direction",
       "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "ops"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 15
-      },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
       "id": 8,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "expr": "sum by (dir, opcode) (rate(h3ws_proxy_frames_total[$__rate_interval]))", "legendFormat": "{{dir}}/{{opcode}}", "refId": "A" }],
+      "title": "Frame Rate by Direction/Opcode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "id": 9,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "expr": "sum by (dir, type) (rate(h3ws_proxy_messages_total[$__rate_interval]))", "legendFormat": "{{dir}}/{{type}}", "refId": "A" }],
+      "title": "Message Rate by Direction/Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        {
-          "expr": "sum by (kind) (increase(h3ws_proxy_oversize_drops_total[5m]))",
-          "legendFormat": "{{kind}}",
-          "refId": "A"
-        }
+        { "expr": "histogram_quantile(0.95, sum(rate(h3ws_proxy_message_size_bytes_bucket[$__rate_interval])) by (le, dir, type))", "legendFormat": "p95 {{dir}}/{{type}}", "refId": "A" },
+        { "expr": "histogram_quantile(0.99, sum(rate(h3ws_proxy_message_size_bytes_bucket[$__rate_interval])) by (le, dir, type))", "legendFormat": "p99 {{dir}}/{{type}}", "refId": "B" }
       ],
-      "title": "Oversize Drops (5m)",
+      "title": "Message Size Quantiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(h3ws_proxy_session_traffic_bytes_bucket[$__rate_interval])) by (le, dir))", "legendFormat": "p95 {{dir}}", "refId": "A" },
+        { "expr": "histogram_quantile(0.99, sum(rate(h3ws_proxy_session_traffic_bytes_bucket[$__rate_interval])) by (le, dir))", "legendFormat": "p99 {{dir}}", "refId": "B" }
+      ],
+      "title": "Session Traffic Quantiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "expr": "sum by (reason) (rate(h3ws_proxy_rejected_total[$__rate_interval]))", "legendFormat": "rejected/{{reason}}", "refId": "A" },
+        { "expr": "sum by (stage) (rate(h3ws_proxy_errors_total[$__rate_interval]))", "legendFormat": "errors/{{stage}}", "refId": "B" },
+        { "expr": "sum by (kind) (rate(h3ws_proxy_oversize_drops_total[$__rate_interval]))", "legendFormat": "oversize/{{kind}}", "refId": "C" }
+      ],
+      "title": "Failure Signals",
       "type": "timeseries"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": [
-    "h3",
-    "websocket",
-    "proxy"
-  ],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-30m",
-    "to": "now"
-  },
+  "tags": ["h3", "websocket", "proxy", "production"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "",
-  "title": "H3WS Proxy Overview",
+  "title": "H3WS Proxy Production Overview",
   "uid": "h3ws-proxy-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
