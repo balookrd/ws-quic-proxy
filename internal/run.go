@@ -92,10 +92,11 @@ func Run() error {
 	}
 
 	server := http3.Server{
-		Addr:       cfg.ListenAddr,
-		Handler:    mux,
-		TLSConfig:  tlsCfg,
-		QUICConfig: quicCfg,
+		Addr:            cfg.ListenAddr,
+		Handler:         mux,
+		TLSConfig:       tlsCfg,
+		QUICConfig:      quicCfg,
+		EnableDatagrams: true,
 	}
 
 	if cfg.Debug {
@@ -123,7 +124,7 @@ func Run() error {
 	}
 
 	if cfg.Debug {
-		log.Printf("[debug] quic config: max_idle=%s keepalive=%s allow_0rtt=%v incoming_streams=%d incoming_uni_streams=%d stream_recv_window=%d conn_recv_window=%d", quicCfg.MaxIdleTimeout, quicCfg.KeepAlivePeriod, quicCfg.Allow0RTT, quicCfg.MaxIncomingStreams, quicCfg.MaxIncomingUniStreams, quicCfg.MaxStreamReceiveWindow, quicCfg.MaxConnectionReceiveWindow)
+		log.Printf("[debug] quic config: max_idle=%s keepalive=%s datagrams=%v allow_0rtt=%v incoming_streams=%d incoming_uni_streams=%d stream_recv_window=%d conn_recv_window=%d", quicCfg.MaxIdleTimeout, quicCfg.KeepAlivePeriod, quicCfg.EnableDatagrams, quicCfg.Allow0RTT, quicCfg.MaxIncomingStreams, quicCfg.MaxIncomingUniStreams, quicCfg.MaxStreamReceiveWindow, quicCfg.MaxConnectionReceiveWindow)
 	}
 
 	log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, backend=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, backendURL.String(), cfg.Debug)
@@ -179,7 +180,7 @@ func startMetricsServer(addr string) {
 
 func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *quic.Config {
 	quicCfg := &quic.Config{
-		EnableDatagrams:                false,
+		EnableDatagrams:                true,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                20 * time.Second,
 		MaxIncomingStreams:             10000,
