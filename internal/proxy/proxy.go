@@ -65,28 +65,20 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// RFC 9220 uses Extended CONNECT with the pseudo-header ":protocol = websocket".
-	// In Go's net/http API, pseudo-headers are not represented consistently across
-	// implementations. In particular, r.Proto is the HTTP version (e.g. "HTTP/3.0"),
-	// not the value of ":protocol".
-	//
-	// quic-go may surface ":protocol" either as a regular header ("Protocol") or not
-	// at all. We therefore treat it as an *optional* validation signal:
-	//   - if a protocol header is present and is not "websocket" => reject
-	//   - if it is absent => accept based on other WebSocket headers
+	// RFC 9220 (via RFC 8441) requires Extended CONNECT with
+	// ":protocol = websocket".
 	if proto := firstNonEmpty(
 		r.Header.Get(":protocol"),
 		r.Header.Get("protocol"),
 		r.Header.Get("Protocol"),
-	); proto != "" && proto != "websocket" {
+	); proto != "websocket" {
 		metrics.Rejected.WithLabelValues("bad_headers").Inc()
 		http.Error(w, "missing/invalid :protocol websocket", http.StatusBadRequest)
 		return
 	}
 
-	key := r.Header.Get("Sec-WebSocket-Key")
 	ver := r.Header.Get("Sec-WebSocket-Version")
-	if key == "" || ver != "13" {
+	if ver != "13" {
 		metrics.Rejected.WithLabelValues("bad_headers").Inc()
 		http.Error(w, "missing/invalid websocket headers", http.StatusBadRequest)
 		return
@@ -104,7 +96,6 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Sec-WebSocket-Accept", ws.ComputeAccept(key))
 	subp := r.Header.Get("Sec-WebSocket-Protocol")
 	if subp != "" {
 		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
