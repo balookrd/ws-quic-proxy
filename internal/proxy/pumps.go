@@ -15,7 +15,7 @@ import (
 )
 
 func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, lim config.Limits) error {
-	br := bufio.NewReader(s)
+	br := bufio.NewReaderSize(s, 64<<10)
 
 	var (
 		assembling   bool
