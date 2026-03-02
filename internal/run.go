@@ -276,7 +276,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 							serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
 							lifetime := time.Since(connStartedAt)
 							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v lifetime=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, err, lifetime, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-							diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
+							diagnoseMissingRequestStream(connID, err, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
 							return
 						}
 						log.Printf("[debug] quic conn closed: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -289,7 +289,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
 						lifetime := time.Since(connStartedAt)
 						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s lifetime=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, lifetime, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-						diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
+						diagnoseMissingRequestStream(connID, err, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID)
 						return
 					}
 					log.Printf("[debug] quic conn closed cleanly: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -381,8 +381,12 @@ func isExpectedDroppedPacket(pt logging.PacketType, reason logging.PacketDropRea
 	return pt == logging.PacketTypeNotDetermined && reason == logging.PacketDropUnknownConnectionID
 }
 
-func diagnoseMissingRequestStream(connID quic.ConnectionID, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID int64) {
+func diagnoseMissingRequestStream(connID quic.ConnectionID, closeErr error, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID int64) {
 	if clientBidi > 0 {
+		if closeErr != nil && strings.Contains(closeErr.Error(), "expected first frame to be a HEADERS frame") {
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s client opened a bidirectional stream but first HTTP/3 frame was not HEADERS; peer is not RFC9114-compliant for request streams", connID)
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s this failure happens before request headers reach application handler; check client-side HTTP/3 framing", connID)
+		}
 		return
 	}
 	log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
