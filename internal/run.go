@@ -190,6 +190,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 			var rxServerUniStreamFrames int64
 			var connStartedAt time.Time
 			var firstClientUniStreamID int64 = -1
+			var loggedClientUniFinHint bool
 
 			log.Printf("[debug] quic connection tracer attached: conn_id=%s", connID)
 			observeRxStreamFrames := func(frames []logging.Frame) {
@@ -208,6 +209,10 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						atomic.AddInt64(&rxClientUniStreamFrames, 1)
 						if firstClientUniStreamID < 0 {
 							firstClientUniStreamID = int64(sf.StreamID)
+						}
+						if !loggedClientUniFinHint && sf.StreamID == 2 && sf.Offset == 0 && sf.Fin && sf.Length <= 16 {
+							loggedClientUniFinHint = true
+							log.Printf("[debug] quic conn hint: conn_id=%s first client uni stream closed immediately (id=2 off=%d len=%d fin=%v); this often indicates peer closed HTTP/3 control stream before opening request stream", connID, sf.Offset, sf.Length, sf.Fin)
 						}
 					case 3:
 						atomic.AddInt64(&rxServerUniStreamFrames, 1)
