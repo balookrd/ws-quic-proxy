@@ -197,8 +197,31 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 			var rxPackets int64
 			var txPackets int64
 			var droppedPackets int64
+			var rxClientBidiStreamFrames int64
+			var rxClientUniStreamFrames int64
+			var rxServerBidiStreamFrames int64
+			var rxServerUniStreamFrames int64
 
 			log.Printf("[debug] quic connection tracer attached: conn_id=%s", connID)
+			observeRxStreamFrames := func(frames []logging.Frame) {
+				for _, f := range frames {
+					sf, ok := f.(*logging.StreamFrame)
+					if !ok {
+						continue
+					}
+					sid := uint64(sf.StreamID)
+					switch sid % 4 {
+					case 0:
+						atomic.AddInt64(&rxClientBidiStreamFrames, 1)
+					case 1:
+						atomic.AddInt64(&rxServerBidiStreamFrames, 1)
+					case 2:
+						atomic.AddInt64(&rxClientUniStreamFrames, 1)
+					case 3:
+						atomic.AddInt64(&rxServerUniStreamFrames, 1)
+					}
+				}
+			}
 			return &logging.ConnectionTracer{
 				StartedConnection: func(local, remote net.Addr, srcConnID, destConnID logging.ConnectionID) {
 					if connRemoteAddr != nil {
@@ -225,12 +248,14 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 					}
 				},
 				ReceivedLongHeaderPacket: func(hdr *logging.ExtendedHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+					observeRxStreamFrames(frames)
 					n := atomic.AddInt64(&rxPackets, 1)
 					if n <= packetLogLimit {
 						log.Printf("[debug] quic packet recv: conn_id=%s kind=long type=%s pn=%d bytes=%d frames=%s", connID, hdr.Type, hdr.PacketNumber, size, summarizeQUICFrames(frames))
 					}
 				},
 				ReceivedShortHeaderPacket: func(hdr *logging.ShortHeader, size logging.ByteCount, _ logging.ECN, frames []logging.Frame) {
+					observeRxStreamFrames(frames)
 					n := atomic.AddInt64(&rxPackets, 1)
 					if n <= packetLogLimit {
 						log.Printf("[debug] quic packet recv: conn_id=%s kind=short pn=%d bytes=%d key_phase=%d frames=%s", connID, hdr.PacketNumber, size, hdr.KeyPhase, summarizeQUICFrames(frames))
@@ -258,14 +283,28 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 					}
 					if err != nil {
 						if !hadReq {
-							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
+							clientBidi := atomic.LoadInt64(&rxClientBidiStreamFrames)
+							clientUni := atomic.LoadInt64(&rxClientUniStreamFrames)
+							serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
+							serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
+							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
+							if clientBidi == 0 {
+								log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
+							}
 							return
 						}
 						log.Printf("[debug] quic conn closed: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
 						return
 					}
 					if !hadReq {
-						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
+						clientBidi := atomic.LoadInt64(&rxClientBidiStreamFrames)
+						clientUni := atomic.LoadInt64(&rxClientUniStreamFrames)
+						serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
+						serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
+						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
+						if clientBidi == 0 {
+							log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
+						}
 						return
 					}
 					log.Printf("[debug] quic conn closed cleanly: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
