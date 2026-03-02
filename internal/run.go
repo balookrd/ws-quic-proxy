@@ -263,6 +263,9 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 				},
 				DroppedPacket: func(pt logging.PacketType, pn logging.PacketNumber, size logging.ByteCount, reason logging.PacketDropReason) {
 					atomic.AddInt64(&droppedPackets, 1)
+					if isExpectedDroppedPacket(pt, reason) {
+						return
+					}
 					log.Printf("[debug] quic packet dropped: conn_id=%s packet_type=%s pn=%d bytes=%d reason=%s", connID, packetTypeName(pt), pn, size, packetDropReasonName(reason))
 				},
 				ChoseALPN: func(protocol string) {
@@ -288,9 +291,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 							serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
 							serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
 							log.Printf("[debug] quic conn closed before any request: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-							if clientBidi == 0 {
-								log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
-							}
+							diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni)
 							return
 						}
 						log.Printf("[debug] quic conn closed: conn_id=%s err=%v rx_packets=%d tx_packets=%d dropped_packets=%d", connID, err, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -302,9 +303,7 @@ func defaultQUICConfig(debug bool, connHadRequest, connRemoteAddr *sync.Map) *qu
 						serverBidi := atomic.LoadInt64(&rxServerBidiStreamFrames)
 						serverUni := atomic.LoadInt64(&rxServerUniStreamFrames)
 						log.Printf("[debug] quic conn closed cleanly before any request: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d rx_stream_frames(client_bidi=%d client_uni=%d server_bidi=%d server_uni=%d)", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets), clientBidi, clientUni, serverBidi, serverUni)
-						if clientBidi == 0 {
-							log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
-						}
+						diagnoseMissingRequestStream(connID, clientBidi, clientUni, serverBidi, serverUni)
 						return
 					}
 					log.Printf("[debug] quic conn closed cleanly: conn_id=%s rx_packets=%d tx_packets=%d dropped_packets=%d", connID, atomic.LoadInt64(&rxPackets), atomic.LoadInt64(&txPackets), atomic.LoadInt64(&droppedPackets))
@@ -392,6 +391,25 @@ func packetDropReasonName(reason logging.PacketDropReason) string {
 		return fmt.Sprintf("unknown(%d)", reason)
 	}
 }
+func isExpectedDroppedPacket(pt logging.PacketType, reason logging.PacketDropReason) bool {
+	return pt == logging.PacketTypeNotDetermined && reason == logging.PacketDropUnknownConnectionID
+}
+
+func diagnoseMissingRequestStream(connID quic.ConnectionID, clientBidi, clientUni, serverBidi, serverUni int64) {
+	if clientBidi > 0 {
+		return
+	}
+	log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
+	switch {
+	case clientUni > 0 && serverBidi == 0 && serverUni == 0:
+		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s only client unidirectional stream traffic observed (typically control stream / SETTINGS), no request stream created", connID)
+	case clientUni == 0 && serverBidi == 0 && serverUni == 0:
+		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s handshake completed but no HTTP/3 stream activity followed", connID)
+	default:
+		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s stream activity observed without client request stream (client_uni=%d server_bidi=%d server_uni=%d)", connID, clientUni, serverBidi, serverUni)
+	}
+}
+
 func loadServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	tlsCfg := config.DefaultTLSConfig()
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
