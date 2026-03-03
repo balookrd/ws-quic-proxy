@@ -31,15 +31,13 @@ func debugf(enabled bool, format string, args ...any) {
 }
 
 func debugWSPayload(enabled bool, direction, upstream, proto string, payload []byte) {
-	if !enabled {
-		return
-	}
+	_ = enabled
 	const previewLimit = 32
 	preview := payload
 	if len(preview) > previewLimit {
 		preview = preview[:previewLimit]
 	}
-	log.Printf("[debug] ws payload %s upstream=%q proto=%q len=%d preview_hex=%s", direction, upstream, proto, len(payload), hex.EncodeToString(preview))
+	log.Printf("[ws] payload %s upstream=%q proto=%q len=%d preview_hex=%s", direction, upstream, proto, len(payload), hex.EncodeToString(preview))
 }
 
 func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, lim config.Limits, st *sessionTrafficStats, debug bool, upstream, proto string) error {
