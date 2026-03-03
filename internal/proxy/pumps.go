@@ -219,8 +219,9 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		if err != nil {
 			var ne net.Error
 			if errors.As(err, &ne) && ne.Timeout() {
-				debugf(debug, "h1->h3 backend read timeout: %v (continuing)", err)
-				continue
+				debugf(debug, "h1->h3 backend read timeout: %v (closing backend->client pump to avoid repeated reads on failed websocket connection)", err)
+				_ = ws.WriteCloseFrame(s, 1001, "backend read timeout")
+				return nil
 			}
 			if ws.IsNetClose(err) {
 				debugf(debug, "h1->h3 backend input half-closed: %v", err)
