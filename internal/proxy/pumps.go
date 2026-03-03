@@ -18,8 +18,10 @@ import (
 )
 
 type sessionTrafficStats struct {
-	h3ToH1Bytes uint64
-	h1ToH3Bytes uint64
+	h3ToH1Bytes    uint64
+	h1ToH3Bytes    uint64
+	h3ToH1Messages uint64
+	h1ToH3Messages uint64
 }
 
 func debugf(enabled bool, format string, args ...any) {
@@ -47,6 +49,7 @@ func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, 
 			metrics.MessageSize.WithLabelValues("h3_to_h1", "text").Observe(float64(len(msg)))
 			metrics.Bytes.WithLabelValues("h3_to_h1").Add(float64(len(msg)))
 			atomic.AddUint64(&st.h3ToH1Bytes, uint64(len(msg)))
+			atomic.AddUint64(&st.h3ToH1Messages, 1)
 			err := bws.WriteMessage(websocket.TextMessage, msg)
 			if err == nil {
 				debugf(debug, "h3->h1 text message forwarded bytes=%d", len(msg))
@@ -57,6 +60,7 @@ func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, 
 			metrics.MessageSize.WithLabelValues("h3_to_h1", "binary").Observe(float64(len(msg)))
 			metrics.Bytes.WithLabelValues("h3_to_h1").Add(float64(len(msg)))
 			atomic.AddUint64(&st.h3ToH1Bytes, uint64(len(msg)))
+			atomic.AddUint64(&st.h3ToH1Messages, 1)
 			err := bws.WriteMessage(websocket.BinaryMessage, msg)
 			if err == nil {
 				debugf(debug, "h3->h1 binary message forwarded bytes=%d", len(msg))
@@ -253,6 +257,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 			metrics.MessageSize.WithLabelValues("h1_to_h3", "text").Observe(float64(len(data)))
 			metrics.Bytes.WithLabelValues("h1_to_h3").Add(float64(len(data)))
 			atomic.AddUint64(&st.h1ToH3Bytes, uint64(len(data)))
+			atomic.AddUint64(&st.h1ToH3Messages, 1)
 			if err := ws.WriteDataFrame(s, ws.OpText, data, false, lim.MaxFrameSize); err != nil {
 				debugf(debug, "h1->h3 write text frame error: %v", err)
 				return err
@@ -264,6 +269,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 			metrics.MessageSize.WithLabelValues("h1_to_h3", "binary").Observe(float64(len(data)))
 			metrics.Bytes.WithLabelValues("h1_to_h3").Add(float64(len(data)))
 			atomic.AddUint64(&st.h1ToH3Bytes, uint64(len(data)))
+			atomic.AddUint64(&st.h1ToH3Messages, 1)
 			if err := ws.WriteDataFrame(s, ws.OpBinary, data, false, lim.MaxFrameSize); err != nil {
 				debugf(debug, "h1->h3 write binary frame error: %v", err)
 				return err

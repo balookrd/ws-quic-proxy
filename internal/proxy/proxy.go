@@ -186,15 +186,19 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	first := <-errCh
+	p.debugf("pump finished: dir=%s err=%v", first.dir, first.err)
 	err1 := first.err
 	if first.dir == "h3_to_h1" && (first.err == nil || errors.Is(first.err, io.EOF) || ws.IsNetClose(first.err)) {
+		p.debugf("h3_to_h1 finished first with graceful close; waiting for backend->client pump to finish")
 		second := <-errCh
+		p.debugf("pump finished: dir=%s err=%v", second.dir, second.err)
 		err1 = second.err
 	} else {
 		cancel()
 		_ = stream.Close()
 		_ = bws.Close()
-		<-errCh
+		second := <-errCh
+		p.debugf("pump finished after cancel: dir=%s err=%v", second.dir, second.err)
 	}
 	cancel()
 	_ = stream.Close()
@@ -204,11 +208,16 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 	dur := time.Since(sessionStarted)
 	h3ToH1Bytes := atomic.LoadUint64(&st.h3ToH1Bytes)
 	h1ToH3Bytes := atomic.LoadUint64(&st.h1ToH3Bytes)
+	h3ToH1Messages := atomic.LoadUint64(&st.h3ToH1Messages)
+	h1ToH3Messages := atomic.LoadUint64(&st.h1ToH3Messages)
 	metrics.SessionDuration.Observe(dur.Seconds())
 	metrics.SessionTrafficBytes.WithLabelValues("h3_to_h1").Observe(float64(h3ToH1Bytes))
 	metrics.SessionTrafficBytes.WithLabelValues("h1_to_h3").Observe(float64(h1ToH3Bytes))
-	p.debugf("session finished: path=%s dur=%s h3_to_h1_bytes=%d h1_to_h3_bytes=%d err=%v", r.URL.Path, dur, h3ToH1Bytes, h1ToH3Bytes, err1)
-	log.Printf("backend session summary: remote=%s path=%s dur=%s h3_to_h1_bytes=%d h1_to_h3_bytes=%d err=%v", r.RemoteAddr, r.URL.Path, dur, h3ToH1Bytes, h1ToH3Bytes, err1)
+	p.debugf("session finished: path=%s dur=%s h3_to_h1_bytes=%d h1_to_h3_bytes=%d h3_to_h1_msgs=%d h1_to_h3_msgs=%d err=%v", r.URL.Path, dur, h3ToH1Bytes, h1ToH3Bytes, h3ToH1Messages, h1ToH3Messages, err1)
+	log.Printf("backend session summary: remote=%s path=%s dur=%s h3_to_h1_bytes=%d h1_to_h3_bytes=%d h3_to_h1_msgs=%d h1_to_h3_msgs=%d err=%v", r.RemoteAddr, r.URL.Path, dur, h3ToH1Bytes, h1ToH3Bytes, h3ToH1Messages, h1ToH3Messages, err1)
+	if h1ToH3Messages == 0 {
+		log.Printf("backend diagnostic: no backend->client messages observed for remote=%s path=%s (backend=%s)", r.RemoteAddr, r.URL.Path, backendURL.String())
+	}
 
 	if err1 != nil && !errors.Is(err1, context.Canceled) && !ws.IsNetClose(err1) {
 		metrics.Errors.WithLabelValues("session").Inc()
