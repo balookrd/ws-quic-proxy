@@ -42,6 +42,10 @@ func debugPayload(enabled bool, direction, upstream, proto string, payload []byt
 	log.Printf("[debug] ws payload %s upstream=%q proto=%q len=%d preview_hex=%s", direction, upstream, proto, len(payload), hex.EncodeToString(preview))
 }
 
+func debugQUICPayload(enabled bool, direction, upstream, proto string, payload []byte) {
+	debugPayload(enabled, "quic_"+direction, upstream, proto, payload)
+}
+
 func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, lim config.Limits, st *sessionTrafficStats, debug bool, upstream, proto string) error {
 	br := bufio.NewReaderSize(s, 64<<10)
 
@@ -102,6 +106,7 @@ func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, 
 			return err
 		}
 		debugf(debug, "h3->h1 frame opcode=%d fin=%v payload=%d", f.Opcode, f.Fin, len(f.Payload))
+		debugQUICPayload(debug, "recv", upstream, proto, f.Payload)
 
 		switch f.Opcode {
 		case ws.OpText, ws.OpBinary:
@@ -160,6 +165,7 @@ func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, 
 			debugPayload(debug, "out", upstream, proto, f.Payload)
 			metrics.Frames.WithLabelValues("h3_to_h1", "ping").Inc()
 			metrics.Ctrl.WithLabelValues("ping").Inc()
+			debugQUICPayload(debug, "send", upstream, proto, f.Payload)
 			if err := ws.WriteControlFrame(s, ws.OpPong, f.Payload); err != nil {
 				debugf(debug, "h3->h1 pong write error: %v", err)
 				return err
@@ -184,6 +190,7 @@ func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, 
 			if err := bws.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason), time.Now().Add(5*time.Second)); err == nil {
 				debugf(debug, "h3->h1 close forwarded code=%d reason=%q", code, reason)
 			}
+			debugQUICPayload(debug, "send", upstream, proto, websocket.FormatCloseMessage(code, reason))
 			_ = ws.WriteCloseFrame(s, uint16(code), reason)
 			return io.EOF
 		}
@@ -195,6 +202,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		debugPayload(debug, "in", upstream, proto, []byte(appData))
 		metrics.Frames.WithLabelValues("h1_to_h3", "ping").Inc()
 		metrics.Ctrl.WithLabelValues("ping").Inc()
+		debugQUICPayload(debug, "send", upstream, proto, []byte(appData))
 		if err := ws.WriteControlFrame(s, ws.OpPing, []byte(appData)); err == nil {
 			debugf(debug, "h1->h3 ping forwarded payload=%d", len(appData))
 		}
@@ -204,6 +212,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		debugPayload(debug, "in", upstream, proto, []byte(appData))
 		metrics.Frames.WithLabelValues("h1_to_h3", "pong").Inc()
 		metrics.Ctrl.WithLabelValues("pong").Inc()
+		debugQUICPayload(debug, "send", upstream, proto, []byte(appData))
 		if err := ws.WriteControlFrame(s, ws.OpPong, []byte(appData)); err == nil {
 			debugf(debug, "h1->h3 pong forwarded payload=%d", len(appData))
 		}
@@ -213,6 +222,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		debugPayload(debug, "in", upstream, proto, websocket.FormatCloseMessage(code, text))
 		metrics.Frames.WithLabelValues("h1_to_h3", "close").Inc()
 		metrics.Ctrl.WithLabelValues("close").Inc()
+		debugQUICPayload(debug, "send", upstream, proto, websocket.FormatCloseMessage(code, text))
 		if err := ws.WriteCloseFrame(s, uint16(code), text); err == nil {
 			debugf(debug, "h1->h3 close forwarded code=%d reason=%q", code, text)
 		}
@@ -243,14 +253,17 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 				switch ce.Code {
 				case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived:
 					debugf(debug, "h1->h3 backend input half-closed: code=%d reason=%q", ce.Code, ce.Text)
+					debugQUICPayload(debug, "send", upstream, proto, websocket.FormatCloseMessage(ce.Code, ce.Text))
 					_ = ws.WriteCloseFrame(s, uint16(ce.Code), ce.Text)
 					return nil
 				}
 			}
 			debugf(debug, "h1->h3 backend read error: %v", err)
 			if ce, ok := err.(*websocket.CloseError); ok {
+				debugQUICPayload(debug, "send", upstream, proto, websocket.FormatCloseMessage(ce.Code, ce.Text))
 				_ = ws.WriteCloseFrame(s, uint16(ce.Code), ce.Text)
 			} else {
+				debugQUICPayload(debug, "send", upstream, proto, websocket.FormatCloseMessage(1011, "backend read error"))
 				_ = ws.WriteCloseFrame(s, 1011, "backend read error")
 			}
 			return err
@@ -266,6 +279,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		switch mt {
 		case websocket.TextMessage:
 			debugPayload(debug, "in", upstream, proto, data)
+			debugQUICPayload(debug, "send", upstream, proto, data)
 			metrics.Frames.WithLabelValues("h1_to_h3", "text").Inc()
 			metrics.Messages.WithLabelValues("h1_to_h3", "text").Inc()
 			metrics.MessageSize.WithLabelValues("h1_to_h3", "text").Observe(float64(len(data)))
@@ -279,6 +293,7 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 			debugf(debug, "h1->h3 text message forwarded bytes=%d", len(data))
 		case websocket.BinaryMessage:
 			debugPayload(debug, "in", upstream, proto, data)
+			debugQUICPayload(debug, "send", upstream, proto, data)
 			metrics.Frames.WithLabelValues("h1_to_h3", "binary").Inc()
 			metrics.Messages.WithLabelValues("h1_to_h3", "binary").Inc()
 			metrics.MessageSize.WithLabelValues("h1_to_h3", "binary").Observe(float64(len(data)))
