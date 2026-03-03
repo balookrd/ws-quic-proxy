@@ -218,6 +218,18 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 				debugf(debug, "h1->h3 backend read timeout: %v (continuing)", err)
 				continue
 			}
+			if ws.IsNetClose(err) {
+				debugf(debug, "h1->h3 backend input half-closed: %v", err)
+				return nil
+			}
+			if ce, ok := err.(*websocket.CloseError); ok {
+				switch ce.Code {
+				case websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived:
+					debugf(debug, "h1->h3 backend input half-closed: code=%d reason=%q", ce.Code, ce.Text)
+					_ = ws.WriteCloseFrame(s, uint16(ce.Code), ce.Text)
+					return nil
+				}
+			}
 			debugf(debug, "h1->h3 backend read error: %v", err)
 			if ce, ok := err.(*websocket.CloseError); ok {
 				_ = ws.WriteCloseFrame(s, uint16(ce.Code), ce.Text)
