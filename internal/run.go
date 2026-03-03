@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,8 +29,28 @@ import (
 	"github.com/quic-go/quic-go/logging"
 )
 
+var buildCommit = "dev"
+
+func currentCommit() string {
+	if buildCommit != "" && buildCommit != "dev" {
+		return buildCommit
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, st := range bi.Settings {
+			if st.Key == "vcs.revision" && st.Value != "" {
+				if len(st.Value) > 12 {
+					return st.Value[:12]
+				}
+				return st.Value
+			}
+		}
+	}
+	return "unknown"
+}
+
 func Run() error {
 	cfg := parseConfig()
+	log.Printf("h3ws2h1ws-proxy starting: commit=%s", currentCommit())
 
 	backendURL, err := url.Parse(cfg.BackendWS)
 	if err != nil {
