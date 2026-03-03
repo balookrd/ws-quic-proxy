@@ -31,7 +31,9 @@ func debugf(enabled bool, format string, args ...any) {
 }
 
 func debugWSPayload(enabled bool, flow string, payload []byte) {
-	_ = enabled
+	if !enabled {
+		return
+	}
 	const previewLimit = 32
 	preview := payload
 	if len(preview) > previewLimit {
