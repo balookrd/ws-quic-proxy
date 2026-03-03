@@ -151,8 +151,25 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = bws.Close() }()
-	log.Printf("backend dial ok: remote=%s path=%s backend=%s", r.RemoteAddr, r.URL.Path, backendURL.String())
-	p.debugf("backend websocket connected: %s", backendURL.String())
+
+	backendStatus := ""
+	backendUpgrade := ""
+	backendConnection := ""
+	backendProto := ""
+	if resp != nil {
+		backendStatus = resp.Status
+		backendUpgrade = resp.Header.Get("Upgrade")
+		backendConnection = resp.Header.Get("Connection")
+		backendProto = resp.Header.Get("Sec-WebSocket-Protocol")
+		if resp.StatusCode != http.StatusSwitchingProtocols {
+			metrics.Errors.WithLabelValues("backend_dial").Inc()
+			log.Printf("backend websocket handshake unexpected status: backend=%s status=%s", backendURL.String(), resp.Status)
+			_ = ws.WriteCloseFrame(stream, 1011, "backend handshake failed")
+			return
+		}
+	}
+	log.Printf("backend dial ok: remote=%s path=%s backend=%s status=%s upgrade=%q connection=%q subprotocol=%q", r.RemoteAddr, r.URL.Path, backendURL.String(), backendStatus, backendUpgrade, backendConnection, backendProto)
+	p.debugf("backend websocket connected: %s (status=%s upgrade=%q connection=%q subprotocol=%q)", backendURL.String(), backendStatus, backendUpgrade, backendConnection, backendProto)
 
 	metrics.Accepted.Inc()
 	metrics.ActiveSessions.Inc()
