@@ -386,8 +386,10 @@ func diagnoseMissingRequestStream(connID quic.ConnectionID, closeErr error, clie
 	if clientBidi > 0 {
 		if closeErr != nil && strings.Contains(closeErr.Error(), "expected first frame to be a HEADERS frame") {
 			metrics.PreRequestClose.WithLabelValues("bidi_first_frame_not_headers").Inc()
+			metrics.Errors.WithLabelValues("h3_framing").Inc()
 			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s client opened a bidirectional stream but first HTTP/3 frame was not HEADERS", connID)
 			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s failure occurs before request reaches handler; likely non-HTTP/3 framing on request stream", connID)
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s remediation: verify client sends HEADERS as first frame on request stream (RFC9114), then Extended CONNECT for RFC9220", connID)
 		}
 		return
 	}
