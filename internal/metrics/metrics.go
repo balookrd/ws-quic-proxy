@@ -54,6 +54,10 @@ var (
 		Name: "h3ws_proxy_oversize_drops_total",
 		Help: "Dropped frames/messages due to size limits",
 	}, []string{"kind"})
+	PreRequestClose = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "h3ws_proxy_prerequest_close_total",
+		Help: "QUIC connections closed before any HTTP request reached handler",
+	}, []string{"reason"})
 )
 
 func init() {
@@ -61,6 +65,6 @@ func init() {
 		ActiveSessions, Accepted, Rejected, Errors,
 		Bytes, Messages, Frames, MessageSize,
 		SessionDuration, SessionTrafficBytes,
-		Ctrl, OversizeDrops,
+		Ctrl, OversizeDrops, PreRequestClose,
 	)
 }

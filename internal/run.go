@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"h3ws2h1ws-proxy/internal/config"
+	"h3ws2h1ws-proxy/internal/metrics"
 	"h3ws2h1ws-proxy/internal/proxy"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -384,22 +385,26 @@ func isExpectedDroppedPacket(pt logging.PacketType, reason logging.PacketDropRea
 func diagnoseMissingRequestStream(connID quic.ConnectionID, closeErr error, clientBidi, clientUni, serverBidi, serverUni, firstClientUniStreamID int64) {
 	if clientBidi > 0 {
 		if closeErr != nil && strings.Contains(closeErr.Error(), "expected first frame to be a HEADERS frame") {
-			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s client opened a bidirectional stream but first HTTP/3 frame was not HEADERS; peer is not RFC9114-compliant for request streams", connID)
-			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s this failure happens before request headers reach application handler; check client-side HTTP/3 framing", connID)
+			metrics.PreRequestClose.WithLabelValues("bidi_first_frame_not_headers").Inc()
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s client opened a bidirectional stream but first HTTP/3 frame was not HEADERS", connID)
+			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s failure occurs before request reaches handler; likely non-HTTP/3 framing on request stream", connID)
 		}
 		return
 	}
 	log.Printf("[debug] quic conn request-stream hint: conn_id=%s no client-initiated bidi stream frames observed (expected stream id 0/4/8... for CONNECT requests)", connID)
 	switch {
 	case clientUni > 0 && serverBidi == 0 && serverUni == 0:
+		metrics.PreRequestClose.WithLabelValues("no_bidi_request_stream").Inc()
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s only client unidirectional stream traffic observed (typically control stream / SETTINGS), no request stream created", connID)
 		if firstClientUniStreamID >= 0 {
 			log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s first_client_uni_stream_id=%d (expected control stream id=2 on first h3 unidirectional stream)", connID, firstClientUniStreamID)
 		}
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s peer likely closed before opening request stream; verify client actually sends CONNECT on client-initiated bidirectional stream", connID)
 	case clientUni == 0 && serverBidi == 0 && serverUni == 0:
+		metrics.PreRequestClose.WithLabelValues("no_h3_stream_activity").Inc()
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s handshake completed but no HTTP/3 stream activity followed", connID)
 	default:
+		metrics.PreRequestClose.WithLabelValues("stream_activity_without_request").Inc()
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s stream activity observed without client request stream (client_uni=%d server_bidi=%d server_uni=%d)", connID, clientUni, serverBidi, serverUni)
 	}
 }
