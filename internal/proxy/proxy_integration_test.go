@@ -73,7 +73,7 @@ func TestRealTrafficClientQUICBackendRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial quic: %v", err)
 	}
-	defer conn.CloseWithError(0, "")
+	defer func() { _ = conn.CloseWithError(0, "") }()
 
 	rt := &http3.SingleDestinationRoundTripper{Connection: conn}
 
