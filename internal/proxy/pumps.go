@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"net"
 	"sync/atomic"
 	"time"
 
@@ -206,23 +205,15 @@ func pumpBackendToH3(ctx context.Context, bws *websocket.Conn, s io.Writer, lim 
 		default:
 		}
 
-		if lim.ReadTimeout > 0 {
-			if err := bws.SetReadDeadline(time.Now().Add(lim.ReadTimeout)); err != nil {
-				return err
-			}
-		} else {
-			if err := bws.SetReadDeadline(time.Time{}); err != nil {
-				return err
-			}
+		// Do not set per-read deadlines for backend websocket reads.
+		// A read timeout can put gorilla/websocket connection into a failed read state
+		// and subsequent ReadMessage calls may panic ("repeated read on failed websocket connection").
+		// Session lifetime is controlled by context cancellation and explicit closes instead.
+		if err := bws.SetReadDeadline(time.Time{}); err != nil {
+			return err
 		}
 		mt, data, err := bws.ReadMessage()
 		if err != nil {
-			var ne net.Error
-			if errors.As(err, &ne) && ne.Timeout() {
-				debugf(debug, "h1->h3 backend read timeout: %v (closing backend->client pump to avoid repeated reads on failed websocket connection)", err)
-				_ = ws.WriteCloseFrame(s, 1001, "backend read timeout")
-				return nil
-			}
 			if ws.IsNetClose(err) {
 				debugf(debug, "h1->h3 backend input half-closed: %v", err)
 				return nil
