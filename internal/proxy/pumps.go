@@ -43,7 +43,18 @@ func debugPayload(enabled bool, direction, upstream, proto string, payload []byt
 }
 
 func debugQUICPayload(enabled bool, direction, upstream, proto string, payload []byte) {
-	debugPayload(enabled, "quic_"+direction, upstream, proto, payload)
+	// Keep the canonical in/out direction labels in logs so operators can
+	// filter by the expected pattern:
+	//   ws payload out upstream=... proto=... len=... preview_hex=...
+	// For QUIC-facing traffic: recv => in, send => out.
+	switch direction {
+	case "recv":
+		debugPayload(enabled, "in", upstream, proto, payload)
+	case "send":
+		debugPayload(enabled, "out", upstream, proto, payload)
+	default:
+		debugPayload(enabled, direction, upstream, proto, payload)
+	}
 }
 
 func pumpH3ToBackend(ctx context.Context, s io.ReadWriter, bws *websocket.Conn, lim config.Limits, st *sessionTrafficStats, debug bool, upstream, proto string) error {
