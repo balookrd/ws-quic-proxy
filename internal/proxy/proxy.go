@@ -135,6 +135,8 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 		EnableCompression: false,
 	}
 	backendHeader := http.Header{}
+	backendHeader["connection"] = []string{"Upgrade"}
+	backendHeader["upgrade"] = []string{"websocket"}
 	if subp != "" {
 		backendHeader.Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
 	}
