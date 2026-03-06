@@ -12,20 +12,25 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"h3ws2h1ws-proxy/internal/config"
 	"h3ws2h1ws-proxy/internal/ws"
 
+	"github.com/gorilla/websocket"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 )
 
 func TestRealTrafficClientQUICBackendRoundTrip(t *testing.T) {
-	backendURL, closeBackend := startEchoBackend(t)
+	headerCapture := &backendHeaderCapture{}
+	backendURL, closeBackend := startEchoBackendWithCapture(t, headerCapture)
 	defer closeBackend()
 
 	backendParsed, err := url.Parse(backendURL)
@@ -104,6 +109,13 @@ func TestRealTrafficClientQUICBackendRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected CONNECT status: got %d", resp.StatusCode)
 	}
 
+	if got := strings.ToLower(headerCapture.Get("Connection")); got != "upgrade" {
+		t.Fatalf("backend Connection header mismatch: got %q want %q", got, "upgrade")
+	}
+	if got := strings.ToLower(headerCapture.Get("Upgrade")); got != "websocket" {
+		t.Fatalf("backend Upgrade header mismatch: got %q want %q", got, "websocket")
+	}
+
 	payload := []byte("real-traffic-client-quic-backend-roundtrip")
 	if err := ws.WriteDataFrame(stream, ws.OpBinary, payload, true, 1<<20); err != nil {
 		t.Fatalf("write client->proxy frame: %v", err)
@@ -119,6 +131,60 @@ func TestRealTrafficClientQUICBackendRoundTrip(t *testing.T) {
 	if string(frame.Payload) != string(payload) {
 		t.Fatalf("payload mismatch: got %q want %q", string(frame.Payload), string(payload))
 	}
+}
+
+type backendHeaderCapture struct {
+	mu     sync.Mutex
+	header http.Header
+}
+
+func (c *backendHeaderCapture) Set(h http.Header) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.header = h.Clone()
+}
+
+func (c *backendHeaderCapture) Get(key string) string {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		c.mu.Lock()
+		h := c.header
+		c.mu.Unlock()
+		if h != nil {
+			return h.Get(key)
+		}
+		if time.Now().After(deadline) {
+			return ""
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func startEchoBackendWithCapture(t *testing.T, capture *backendHeaderCapture) (string, func()) {
+	t.Helper()
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capture.Set(r.Header)
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			mt, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if err := conn.WriteMessage(mt, data); err != nil {
+				return
+			}
+		}
+	}))
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	return wsURL, srv.Close
 }
 
 func mustMakeTLSCert(t *testing.T) tls.Certificate {
