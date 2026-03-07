@@ -83,7 +83,7 @@ func Run() error {
 	}
 
 	if cfg.Debug {
-		server.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		server.Logger = slog.New(newQuicDebugLogFilter(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
 			log.Printf("[debug] http3 conn context: conn_id=%v local=%s remote=%s", c.Context().Value(quic.ConnectionTracingKey), c.LocalAddr(), c.RemoteAddr())
 			return ctx
@@ -424,6 +424,51 @@ func diagnoseMissingRequestStream(connID quic.ConnectionID, closeErr error, clie
 		metrics.PreRequestClose.WithLabelValues("stream_activity_without_request").Inc()
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s stream activity observed without client request stream (client_uni=%d server_bidi=%d server_uni=%d)", connID, clientUni, serverBidi, serverUni)
 	}
+}
+
+type quicDebugLogFilter struct {
+	next slog.Handler
+}
+
+func newQuicDebugLogFilter(next slog.Handler) slog.Handler {
+	return &quicDebugLogFilter{next: next}
+}
+
+func (h *quicDebugLogFilter) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.next.Enabled(ctx, level)
+}
+
+func (h *quicDebugLogFilter) Handle(ctx context.Context, record slog.Record) error {
+	if shouldSuppressQuicDebugRecord(record) {
+		return nil
+	}
+	return h.next.Handle(ctx, record)
+}
+
+func (h *quicDebugLogFilter) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &quicDebugLogFilter{next: h.next.WithAttrs(attrs)}
+}
+
+func (h *quicDebugLogFilter) WithGroup(name string) slog.Handler {
+	return &quicDebugLogFilter{next: h.next.WithGroup(name)}
+}
+
+func shouldSuppressQuicDebugRecord(record slog.Record) bool {
+	if record.Level != slog.LevelDebug {
+		return false
+	}
+	if record.Message != "accepting unidirectional stream failed" && record.Message != "handling connection failed" {
+		return false
+	}
+	errText := ""
+	record.Attrs(func(a slog.Attr) bool {
+		if a.Key == "error" {
+			errText = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return strings.Contains(errText, "NO_ERROR (remote)")
 }
 
 func loadServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
