@@ -114,13 +114,14 @@ func newProxyHandler(cfg config.Config, p *proxy.Proxy, connHadRequest *sync.Map
 			connHadRequest.Store(r.RemoteAddr, true)
 		}
 
-		if isHealthPath(r.URL.Path) {
+		path := requestPath(r)
+		if isHealthPath(path) {
 			handleHealthRequest(w, r)
 			return
 		}
 
 		if r.Method != http.MethodConnect {
-			if r.URL.Path == "/" {
+			if path == "/" {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok\n"))
 				return
@@ -138,6 +139,31 @@ func isHealthPath(path string) bool {
 	return path == "/health/tcp" || path == "/health/udp"
 }
 
+func requestPath(r *http.Request) string {
+	if p := normalizeRequestPath(r.URL.Path); p != "" {
+		return p
+	}
+	if u, err := url.Parse(r.URL.String()); err == nil {
+		if p := normalizeRequestPath(u.Path); p != "" {
+			return p
+		}
+	}
+	return "/"
+}
+
+func normalizeRequestPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if strings.HasPrefix(p, "//") {
+		if i := strings.Index(p[2:], "/"); i >= 0 {
+			return p[i+2:]
+		}
+		return "/"
+	}
+	return p
+}
+
 func handleHealthRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodConnect {
 		w.WriteHeader(http.StatusOK)
@@ -152,17 +178,9 @@ func handleHealthRequest(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
 	}
 
+	// For CONNECT health probes we only acknowledge CONNECT with 200 and
+	// let the client close its probe stream/connection lifecycle.
 	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-
-	hs, ok := w.(http3.HTTPStreamer)
-	if !ok {
-		return
-	}
-	stream := hs.HTTPStream()
-	_ = stream.Close()
 }
 
 func parseConfig() config.Config {

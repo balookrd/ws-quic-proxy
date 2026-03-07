@@ -132,8 +132,8 @@ docker run --rm \
 Endpoint: `http://<metrics-addr>/metrics` (доступен только если задан `-metrics`)
 
 Health-check endpoints (на основном HTTP/3 listener):
-- `/health/tcp` → для `GET`: `200 OK` + `ok`; для `CONNECT`: `200 OK` (без тела; stream закрывается сразу на стороне прокси)
-- `/health/udp` → для `GET`: `200 OK` + `ok`; для `CONNECT`: `200 OK` (без тела; stream закрывается сразу на стороне прокси)
+- `/health/tcp` → для `GET`: `200 OK` + `ok`; для `CONNECT`: `200 OK` (без тела; закрытие выполняет probe-клиент)
+- `/health/udp` → для `GET`: `200 OK` + `ok`; для `CONNECT`: `200 OK` (без тела; закрытие выполняет probe-клиент)
 
 Ключевые метрики:
 - `h3ws_proxy_active_sessions`

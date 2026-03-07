@@ -103,3 +103,17 @@ func TestShouldSuppressQuicDebugRecord(t *testing.T) {
 		t.Fatal("did not expect suppress for real error")
 	}
 }
+
+func TestRequestPath(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodConnect, "https://senko.beerloga.su/health/udp", nil)
+	if got, want := requestPath(req), "/health/udp"; got != want {
+		t.Fatalf("requestPath absolute: got %q, want %q", got, want)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/health/tcp", nil)
+	if got, want := requestPath(req2), "/health/tcp"; got != want {
+		t.Fatalf("requestPath origin: got %q, want %q", got, want)
+	}
+}
