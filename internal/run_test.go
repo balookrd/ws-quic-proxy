@@ -38,7 +38,7 @@ func TestNewProxyHandlerHealthEndpoints(t *testing.T) {
 				"Sec-WebSocket-Protocol": "chat, superchat",
 			},
 			status: http.StatusOK,
-			body:   "ok\n",
+			body:   "",
 			assert: func(t *testing.T, rr *httptest.ResponseRecorder) {
 				t.Helper()
 				if got, want := rr.Header().Get("Sec-WebSocket-Accept"), ws.ComputeAccept("dGhlIHNhbXBsZSBub25jZQ=="); got != want {

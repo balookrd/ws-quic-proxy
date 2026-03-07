@@ -115,16 +115,7 @@ func newProxyHandler(cfg config.Config, p *proxy.Proxy, connHadRequest *sync.Map
 		}
 
 		if isHealthPath(r.URL.Path) {
-			if r.Method == http.MethodConnect {
-				if key := r.Header.Get("Sec-WebSocket-Key"); key != "" {
-					w.Header().Set("Sec-WebSocket-Accept", ws.ComputeAccept(key))
-				}
-				if subp := r.Header.Get("Sec-WebSocket-Protocol"); subp != "" {
-					w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
-				}
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok\n"))
+			handleHealthRequest(w, r)
 			return
 		}
 
@@ -145,6 +136,31 @@ func newProxyHandler(cfg config.Config, p *proxy.Proxy, connHadRequest *sync.Map
 
 func isHealthPath(path string) bool {
 	return path == "/health/tcp" || path == "/health/udp"
+}
+
+func handleHealthRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodConnect {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+		return
+	}
+
+	if key := r.Header.Get("Sec-WebSocket-Key"); key != "" {
+		w.Header().Set("Sec-WebSocket-Accept", ws.ComputeAccept(key))
+	}
+	if subp := r.Header.Get("Sec-WebSocket-Protocol"); subp != "" {
+		w.Header().Set("Sec-WebSocket-Protocol", ws.PickFirstToken(subp))
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	hs, ok := w.(http3.HTTPStreamer)
+	if !ok {
+		return
+	}
+	stream := hs.HTTPStream()
+	defer func() { _ = stream.Close() }()
+	_ = ws.WriteCloseFrame(stream, 1000, "healthcheck")
 }
 
 func parseConfig() config.Config {
