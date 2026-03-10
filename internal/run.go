@@ -65,26 +65,7 @@ func Run() error {
 	var connHadRequest sync.Map
 	var connRemoteAddr sync.Map
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if cfg.Debug {
-			log.Printf("[debug] incoming http request: method=%s proto=%s host=%s path=%s remote=%s", r.Method, r.Proto, r.Host, r.URL.String(), r.RemoteAddr)
-		}
-
-		if strings.ToUpper(r.Method) == http.MethodConnect {
-			connHadRequest.Store(r.RemoteAddr, true)
-			p.HandleH3WebSocket(w, r)
-			return
-		}
-
-		if r.URL.Path == "/" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok\n"))
-			return
-		}
-
-		http.NotFound(w, r)
-	})
+	mux := newProxyHandler(cfg, p, &connHadRequest)
 
 	quicCfg := defaultQUICConfig(cfg.Debug, &connHadRequest, &connRemoteAddr)
 	tlsCfg, err := loadServerTLSConfig(cfg.CertFile, cfg.KeyFile)
@@ -101,7 +82,7 @@ func Run() error {
 	}
 
 	if cfg.Debug {
-		server.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		server.Logger = slog.New(newQuicDebugLogFilter(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 		server.ConnContext = func(ctx context.Context, c quic.Connection) context.Context {
 			log.Printf("[debug] http3 conn context: conn_id=%v local=%s remote=%s", c.Context().Value(quic.ConnectionTracingKey), c.LocalAddr(), c.RemoteAddr())
 			return ctx
@@ -121,6 +102,82 @@ func Run() error {
 	return nil
 }
 
+func newProxyHandler(cfg config.Config, p *proxy.Proxy, connHadRequest *sync.Map) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.Debug {
+			log.Printf("[debug] incoming http request: method=%s proto=%s host=%s path=%s remote=%s", r.Method, r.Proto, r.Host, r.URL.String(), r.RemoteAddr)
+		}
+
+		if connHadRequest != nil {
+			connHadRequest.Store(r.RemoteAddr, true)
+		}
+
+		path := requestPath(r)
+		if path != r.URL.Path {
+			r.URL.Path = path
+			r.URL.RawPath = ""
+		}
+		if isHealthPath(path) {
+			handleHealthRequest(w, r)
+			return
+		}
+
+		if r.Method != http.MethodConnect {
+			if path == "/" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("ok\n"))
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+
+		p.HandleH3WebSocket(w, r)
+	})
+	return mux
+}
+
+func isHealthPath(path string) bool {
+	return path == "/health/tcp" || path == "/health/udp"
+}
+
+func requestPath(r *http.Request) string {
+	if p := normalizeRequestPath(r.URL.Path); p != "" {
+		return p
+	}
+	if u, err := url.Parse(r.URL.String()); err == nil {
+		if p := normalizeRequestPath(u.Path); p != "" {
+			return p
+		}
+	}
+	return "/"
+}
+
+func normalizeRequestPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if strings.HasPrefix(p, "//") {
+		if i := strings.Index(p[2:], "/"); i >= 0 {
+			return p[i+2:]
+		}
+		return "/"
+	}
+	return p
+}
+
+func handleHealthRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodConnect {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+		return
+	}
+
+	// For CONNECT health probes return a neutral 200 response only.
+	// No websocket-specific response headers or frames are emitted here.
+	w.WriteHeader(http.StatusOK)
+}
 func parseConfig() config.Config {
 	var cfg config.Config
 
@@ -387,6 +444,51 @@ func diagnoseMissingRequestStream(connID quic.ConnectionID, closeErr error, clie
 		metrics.PreRequestClose.WithLabelValues("stream_activity_without_request").Inc()
 		log.Printf("[debug] quic conn request-stream diagnosis: conn_id=%s stream activity observed without client request stream (client_uni=%d server_bidi=%d server_uni=%d)", connID, clientUni, serverBidi, serverUni)
 	}
+}
+
+type quicDebugLogFilter struct {
+	next slog.Handler
+}
+
+func newQuicDebugLogFilter(next slog.Handler) slog.Handler {
+	return &quicDebugLogFilter{next: next}
+}
+
+func (h *quicDebugLogFilter) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.next.Enabled(ctx, level)
+}
+
+func (h *quicDebugLogFilter) Handle(ctx context.Context, record slog.Record) error {
+	if shouldSuppressQuicDebugRecord(record) {
+		return nil
+	}
+	return h.next.Handle(ctx, record)
+}
+
+func (h *quicDebugLogFilter) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &quicDebugLogFilter{next: h.next.WithAttrs(attrs)}
+}
+
+func (h *quicDebugLogFilter) WithGroup(name string) slog.Handler {
+	return &quicDebugLogFilter{next: h.next.WithGroup(name)}
+}
+
+func shouldSuppressQuicDebugRecord(record slog.Record) bool {
+	if record.Level != slog.LevelDebug {
+		return false
+	}
+	if record.Message != "accepting unidirectional stream failed" && record.Message != "handling connection failed" {
+		return false
+	}
+	errText := ""
+	record.Attrs(func(a slog.Attr) bool {
+		if a.Key == "error" {
+			errText = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return strings.Contains(errText, "NO_ERROR (remote)")
 }
 
 func loadServerTLSConfig(certFile, keyFile string) (*tls.Config, error) {
