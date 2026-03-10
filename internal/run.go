@@ -95,7 +95,11 @@ func Run() error {
 		log.Printf("[debug] quic config: max_idle=%s keepalive=%s datagrams=%v allow_0rtt=%v incoming_streams=%d incoming_uni_streams=%d stream_recv_window=%d conn_recv_window=%d", quicCfg.MaxIdleTimeout, quicCfg.KeepAlivePeriod, quicCfg.EnableDatagrams, quicCfg.Allow0RTT, quicCfg.MaxIncomingStreams, quicCfg.MaxIncomingUniStreams, quicCfg.MaxStreamReceiveWindow, quicCfg.MaxConnectionReceiveWindow)
 	}
 
-	log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, backend=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, backendURL.String(), cfg.Debug)
+	if cfg.Debug {
+		log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, backend=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, backendURL.String(), cfg.Debug)
+	} else {
+		log.Printf("HTTP/3 WS proxy listening on udp %s, path=%s, debug=%v", cfg.ListenAddr, cfg.PathPattern, cfg.Debug)
+	}
 	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("ListenAndServe: %w", err)
 	}
