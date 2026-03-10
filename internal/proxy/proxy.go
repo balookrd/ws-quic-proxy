@@ -54,7 +54,7 @@ func (p *websocketBufferPool) Put(x interface{}) {
 	}
 }
 
-var backendWriteBufferPool = newWebsocketBufferPool(64 << 10)
+var backendWriteBufferPool = newWebsocketBufferPool(16 << 10)
 
 func (p *Proxy) debugf(format string, args ...any) {
 	if p.Debug {
@@ -156,8 +156,8 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 
 	dialer := websocket.Dialer{
 		Proxy:             http.ProxyFromEnvironment,
-		ReadBufferSize:    64 << 10,
-		WriteBufferSize:   64 << 10,
+		ReadBufferSize:    16 << 10,
+		WriteBufferSize:   16 << 10,
 		WriteBufferPool:   backendWriteBufferPool,
 		HandshakeTimeout:  10 * time.Second,
 		EnableCompression: false,
