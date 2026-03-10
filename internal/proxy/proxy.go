@@ -34,7 +34,10 @@ type websocketBufferPool struct {
 }
 
 func newWebsocketBufferPool(bufSize int) *websocketBufferPool {
-	return &websocketBufferPool{pool: sync.Pool{New: func() any { return make([]byte, bufSize) }}}
+	return &websocketBufferPool{pool: sync.Pool{New: func() any {
+		b := make([]byte, bufSize)
+		return &b
+	}}}
 }
 
 func (p *websocketBufferPool) Get() interface{} {
@@ -42,11 +45,13 @@ func (p *websocketBufferPool) Get() interface{} {
 }
 
 func (p *websocketBufferPool) Put(x interface{}) {
-	b, ok := x.([]byte)
-	if !ok {
-		return
+	switch b := x.(type) {
+	case *[]byte:
+		p.pool.Put(b)
+	case []byte:
+		bb := b
+		p.pool.Put(&bb)
 	}
-	p.pool.Put(b)
 }
 
 var backendWriteBufferPool = newWebsocketBufferPool(64 << 10)
