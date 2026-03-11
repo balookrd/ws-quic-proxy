@@ -171,6 +171,9 @@ func (p *Proxy) HandleH3WebSocket(w http.ResponseWriter, r *http.Request) {
 	backendURL := p.backendURLForRequest(r)
 	p.debugf("dial backend websocket: %s", backendURL.String())
 	bws, resp, err := dialer.Dial(backendURL.String(), backendHeader)
+	if resp != nil && resp.Body != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		metrics.Errors.WithLabelValues("backend_dial").Inc()
 		if resp != nil {
