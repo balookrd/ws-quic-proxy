@@ -113,13 +113,13 @@ func TestMetricsHandlerExposesGoRuntimeMetrics(t *testing.T) {
 
 	body := rr.Body.String()
 	metricNames := []string{
-		"outlinews_go_mem_alloc_bytes",
-		"outlinews_go_heap_inuse_bytes",
-		"outlinews_go_heap_idle_bytes",
-		"outlinews_go_heap_released_bytes",
-		"outlinews_go_mem_sys_bytes",
-		"outlinews_go_gc_last_pause_seconds",
-		"outlinews_go_gc_cycles_total",
+		"h3ws_proxy_go_mem_alloc_bytes",
+		"h3ws_proxy_go_heap_inuse_bytes",
+		"h3ws_proxy_go_heap_idle_bytes",
+		"h3ws_proxy_go_heap_released_bytes",
+		"h3ws_proxy_go_mem_sys_bytes",
+		"h3ws_proxy_go_gc_last_pause_seconds",
+		"h3ws_proxy_go_gc_cycles_total",
 	}
 	for _, name := range metricNames {
 		if !strings.Contains(body, name) {

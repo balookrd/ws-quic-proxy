@@ -63,31 +63,31 @@ var (
 		Help: "QUIC connections closed before any HTTP request reached handler",
 	}, []string{"reason"})
 	GoMemAllocBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_mem_alloc_bytes",
+		Name: "h3ws_proxy_go_mem_alloc_bytes",
 		Help: "Bytes of allocated heap objects",
 	})
 	GoHeapInuseBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_heap_inuse_bytes",
+		Name: "h3ws_proxy_go_heap_inuse_bytes",
 		Help: "Bytes in in-use heap spans",
 	})
 	GoHeapIdleBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_heap_idle_bytes",
+		Name: "h3ws_proxy_go_heap_idle_bytes",
 		Help: "Bytes in idle (unused) heap spans",
 	})
 	GoHeapReleasedBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_heap_released_bytes",
+		Name: "h3ws_proxy_go_heap_released_bytes",
 		Help: "Bytes of physical memory returned to the OS",
 	})
 	GoMemSysBytes = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_mem_sys_bytes",
+		Name: "h3ws_proxy_go_mem_sys_bytes",
 		Help: "Bytes obtained from the OS",
 	})
 	GoGCLastPauseSeconds = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_gc_last_pause_seconds",
+		Name: "h3ws_proxy_go_gc_last_pause_seconds",
 		Help: "Last GC stop-the-world pause duration in seconds",
 	})
 	GoGCCyclesTotal = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "outlinews_go_gc_cycles_total",
+		Name: "h3ws_proxy_go_gc_cycles_total",
 		Help: "Total completed GC cycles",
 	})
 )

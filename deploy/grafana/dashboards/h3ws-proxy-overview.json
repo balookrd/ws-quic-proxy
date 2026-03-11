@@ -1002,35 +1002,35 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "outlinews_go_mem_alloc_bytes{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_mem_alloc_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} alloc",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "outlinews_go_heap_inuse_bytes{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_heap_inuse_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} heap_inuse",
           "range": true,
           "refId": "B"
         },
         {
           "editorMode": "code",
-          "expr": "outlinews_go_heap_idle_bytes{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_heap_idle_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} heap_idle",
           "range": true,
           "refId": "C"
         },
         {
           "editorMode": "code",
-          "expr": "outlinews_go_heap_released_bytes{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_heap_released_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} heap_released",
           "range": true,
           "refId": "D"
         },
         {
           "editorMode": "code",
-          "expr": "outlinews_go_mem_sys_bytes{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_mem_sys_bytes{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} mem_sys",
           "range": true,
           "refId": "E"
@@ -1109,14 +1109,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rate(outlinews_go_gc_cycles_total{instance=~\"$instance\"}[$__rate_interval])",
+          "expr": "rate(h3ws_proxy_go_gc_cycles_total{instance=~\"$instance\"}[$__rate_interval])",
           "legendFormat": "{{instance}} gc_cycles_rate",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "outlinews_go_gc_last_pause_seconds{instance=~\"$instance\"}",
+          "expr": "h3ws_proxy_go_gc_last_pause_seconds{instance=~\"$instance\"}",
           "legendFormat": "{{instance}} gc_last_pause",
           "range": true,
           "refId": "B"
