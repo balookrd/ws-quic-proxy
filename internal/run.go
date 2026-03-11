@@ -62,12 +62,16 @@ func Run() error {
 		},
 	}
 
-	var connHadRequest sync.Map
-	var connRemoteAddr sync.Map
+	var connHadRequest *sync.Map
+	var connRemoteAddr *sync.Map
+	if cfg.Debug {
+		connHadRequest = &sync.Map{}
+		connRemoteAddr = &sync.Map{}
+	}
 
-	mux := newProxyHandler(cfg, p, &connHadRequest)
+	mux := newProxyHandler(cfg, p, connHadRequest)
 
-	quicCfg := defaultQUICConfig(cfg.Debug, &connHadRequest, &connRemoteAddr)
+	quicCfg := defaultQUICConfig(cfg.Debug, connHadRequest, connRemoteAddr)
 	tlsCfg, err := loadServerTLSConfig(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		return fmt.Errorf("load TLS config: %w", err)
